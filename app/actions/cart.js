@@ -3,6 +3,14 @@
 import { prisma } from '@/lib/db/prisma'
 
 export async function addToCart(variantId) {
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+  })
+
+  if (!variant || variant.stock < 1) {
+    throw new Error('Out of stock')
+  }
+
   // Find anonymous cart
   let cart = await prisma.cart.findFirst({
     where: {

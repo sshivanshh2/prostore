@@ -21,3 +21,52 @@ export async function markOrderPaid(orderId, userId) {
     data: { status: 'PAID' },
   })
 }
+
+// Admin Actions (Ship, deliver or cancel)
+export async function updateOrderStatus(orderId, status) {
+  const allowed = ['SHIPPED', 'DELIVERED', 'CANCELLED']
+
+  if (!allowed.includes(status)) {
+    throw new Error('Invalid status')
+  }
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data: { status },
+  })
+}
+
+export async function createOrder({ userId, cart }) {
+  return prisma.$transaction(async (tx) => {
+    for (const item of cart.items) {
+      const updated = await tx.productVariant.updateMany({
+        where: {
+          id: item.variantId,
+          stock: { gte: item.quantity },
+        },
+        data: {
+          stock: { decrement: item.quantity },
+        },
+      })
+
+      if (updated.count === 0) {
+        throw new Error('Insufficient stock')
+      }
+    }
+
+    return tx.order.create({
+      data: {
+        userId,
+        status: 'PAID',
+        totalAmount: cart.totalAmount,
+        items: {
+          create: cart.items.map((item) => ({
+            name: item.variant.name,
+            price: item.variant.price,
+            quantity: item.quantity,
+          })),
+        },
+      },
+    })
+  })
+}
